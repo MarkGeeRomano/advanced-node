@@ -18,7 +18,6 @@ mongoose.Query.prototype.cache = function (opts = {}) {
 mongoose.Query.prototype.exec = async function () {
   if (this.useCache) {
     const key = JSON.stringify({ ...this.getQuery(), collection: this.mongooseCollection.name })
-    debug({key})
     const cache = await client.hget(this.hashKey, key)
     if (cache) {
       debug('using cache')
@@ -38,7 +37,7 @@ mongoose.Query.prototype.exec = async function () {
 
 module.exports = {
   async clearHash (hashKey) {
-    debug('deleting', hashKey)
+    debug('deleting')
     client.del(JSON.stringify(hashKey))
   }
 }
