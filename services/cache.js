@@ -5,31 +5,40 @@ const debug = require('debug')('project')
 
 const redisUrl = 'redis://127.0.0.1:6379'
 const client = redis.createClient(redisUrl)
+client.hget = promisify(client.hget)
 client.get = promisify(client.get)
 
 const exec = mongoose.Query.prototype.exec
 
-mongoose.Query.prototype.cache = function () {
+mongoose.Query.prototype.cache = function (opts = {}) {
   this.useCache = true
+  this.hashKey = JSON.stringify(opts.hashKey || '')
   return this
 }
 mongoose.Query.prototype.exec = async function () {
   if (this.useCache) {
-    debug('Attemping to cache/ use cache')
     const key = JSON.stringify({ ...this.getQuery(), collection: this.mongooseCollection.name })
-    const cache = await client.get(key)
+    debug({key})
+    const cache = await client.hget(this.hashKey, key)
     if (cache) {
+      debug('using cache')
       const doc = JSON.parse(cache)
       if (Array.isArray(doc))
       return Array.isArray(doc)
-      ? doc.map(item => new this.model(item))
-      : new this.model(doc)
+        ? doc.map(item => new this.model(item))
+        : new this.model(doc)
     }
-
+    debug('caching')
     const result = await exec.apply(this, arguments)
-    client.set(key, JSON.stringify(result))
+    client.hset(this.hashKey, key, JSON.stringify(result))
     return result
   }
-  debug('not using cache')
   return await exec.apply(this, arguments)
+}
+
+module.exports = {
+  async clearHash (hashKey) {
+    debug('deleting', hashKey)
+    client.del(JSON.stringify(hashKey))
+  }
 }
